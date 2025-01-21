@@ -220,9 +220,33 @@ actor ICNomads {
         meetups.put(meetupId, newMeetup);
          #ok(());
     };
-    public shared ({caller}) func editMeetup(payload : meetupPayload){
+  public shared ({caller}) func editMeetup(meetupId: MeetupId, payload: meetupPayload): async Result.Result<(), Text>  {
+     let oldMeetup: ?MeetUp = meetups.get(meetupId);
+     switch(oldMeetup){
+        case(null){#err("meetup not found")}; //meetup doesnt exist
+        case(?currentMeetup){
+            if(currentMeetup.creator != caller){
+              #err(("you are not the func creator"));
+            }else{
+                let updatedMeetup: MeetUp = {
+                topic = payload.topic;
+                time = payload.time;
+                date = payload.date;
+                status = payload.status;
+                createdAt = currentMeetup.createdAt;
+                id = currentMeetup.id;
+                creator = currentMeetup.creator;
+                };
+                meetups.put(meetupId, updatedMeetup);
+                #ok(());
+            }
+        }
+     };
 
-    };
+
+
+};
+
 
     // User Management
     public shared({caller}) func registerUser(username: Text, email: Text) : async Result.Result<(), Text> {
@@ -265,6 +289,14 @@ actor ICNomads {
             };
         };
     };
+
+public query func getUserProfile(userId: UserId) : async ?UserView {
+    switch (users.get(userId)) { //gets the detailed view of the user profile
+        case null { null };
+        case (?user) { ?userToUserView(user) };
+    };
+};
+
 
     // Bounty Management
     public shared({caller}) func createBounty(
