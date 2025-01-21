@@ -7,6 +7,8 @@ import Time "mo:base/Time";
 import Text "mo:base/Text";
 import Buffer "mo:base/Buffer";
 import Result "mo:base/Result";
+import Nat64 "mo:base/Nat64";
+import Int "mo:base/Int";
 
 actor ICNomads {
     // Types
@@ -52,6 +54,7 @@ actor ICNomads {
     };
 
     type BountyId = Nat;
+     type MeetupId = Nat;
 
     public type BountyView = {
         id: BountyId;
@@ -125,12 +128,34 @@ actor ICNomads {
         #HashtagUsed: Text;
     };
 
+    public type MeetUp = {
+        id: Nat;
+        topic: Text;
+        time: Nat;
+        date: Text;
+        createdAt: Time.Time;
+        status: meetupState;
+        creator : Principal;
+    };
+    public type meetupState= {
+        #inProgress;
+        #upcoming;
+        #completed;
+    };
+    public type meetupPayload = {
+        topic: Text;
+        time: Nat;
+        date: Text;
+        status: meetupState;
+    };
+
     // State Variables
     private stable var nextBountyId: Nat = 0;
+    private stable var nextMeetupId: Nat= 0;
     private var users = HashMap.HashMap<UserId, UserData>(0, Principal.equal, Principal.hash);
     private var companies = HashMap.HashMap<CompanyId, CompanyData>(0, Principal.equal, Principal.hash);
     private var bounties = HashMap.HashMap<BountyId, BountyData>(0, Nat.equal, Hash.hash);
-
+    private var meetups = HashMap.HashMap<MeetupId, MeetUp>(0, Nat.equal, Hash.hash);
     // Conversion functions
     private func userToUserView(user: UserData) : UserView {
         {
@@ -179,9 +204,29 @@ actor ICNomads {
         }
     };
 
+    //Meetup management
+    public shared({caller}) func addMeetUp(payload: meetupPayload): async Result.Result<(), Text>{
+         let meetupId = nextMeetupId;
+        nextMeetupId += 1;
+        let newMeetup: MeetUp = {
+        id=  meetupId;
+        topic =  payload.topic;
+        time =  payload.time;
+        date =  payload.date;
+        createdAt =  Time.now();
+        status =  #upcoming;
+        creator = caller;
+        };
+        meetups.put(meetupId, newMeetup);
+         #ok(());
+    };
+    public shared ({caller}) func editMeetup(payload : meetupPayload){
+
+    };
+
     // User Management
-    public shared(msg) func registerUser(username: Text, email: Text) : async Result.Result<(), Text> {
-        let caller = msg.caller;
+    public shared({caller}) func registerUser(username: Text, email: Text) : async Result.Result<(), Text> {
+        
         
         switch (users.get(caller)) {
             case (?_) { #err("User already exists") };
@@ -202,8 +247,8 @@ actor ICNomads {
         };
     };
 
-    public shared(msg) func registerCompany(name: Text, description: Text, website: ?Text) : async Result.Result<(), Text> {
-        let caller = msg.caller;
+    public shared({caller}) func registerCompany(name: Text, description: Text, website: ?Text) : async Result.Result<(), Text> {
+        
         
         switch (companies.get(caller)) {
             case (?_) { #err("Company already exists") };
@@ -222,13 +267,13 @@ actor ICNomads {
     };
 
     // Bounty Management
-    public shared(msg) func createBounty(
+    public shared({caller}) func createBounty(
         title: Text,
         description: Text,
         reward: Nat,
         deadline: Int
     ) : async Result.Result<BountyId, Text> {
-        let caller = msg.caller;
+        
         
         switch (companies.get(caller)) {
             case null { #err("Only registered companies can create bounties") };
@@ -271,8 +316,8 @@ actor ICNomads {
     };
 
     // Submission Management
-    public shared(msg) func submitBounty(bountyId: BountyId, content: Text) : async Result.Result<(), Text> {
-        let caller = msg.caller;
+    public shared({caller}) func submitBounty(bountyId: BountyId, content: Text) : async Result.Result<(), Text> {
+        
         
         switch (bounties.get(bountyId)) {
             case null { #err("Bounty not found") };
@@ -299,7 +344,7 @@ actor ICNomads {
     };
 
     // Activity and XP Management
-    public shared(msg) func addActivity(userId: UserId, activityType: ActivityType, points: Nat) : async Result.Result<(), Text> {
+    public shared func addActivity(userId: UserId, activityType: ActivityType, points: Nat) : async Result.Result<(), Text> {
         switch (users.get(userId)) {
             case null { #err("User not found") };
             case (?user) {
@@ -333,16 +378,16 @@ actor ICNomads {
     };
 
     // Profile Management
-    public query(msg) func getProfile() : async Result.Result<UserView, Text> {
-        let caller = msg.caller;
+    public query({caller}) func getProfile() : async Result.Result<UserView, Text> {
+        
         switch (users.get(caller)) {
             case null { #err("User not found") };
             case (?user) { #ok(userToUserView(user)) };
         };
     };
 
-    public shared(msg) func updateProfile(username: Text, email: Text) : async Result.Result<(), Text> {
-        let caller = msg.caller;
+    public shared({caller}) func updateProfile(username: Text, email: Text) : async Result.Result<(), Text> {
+        
         switch (users.get(caller)) {
             case null { #err("User not found") };
             case (?user) {
