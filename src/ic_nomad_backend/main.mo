@@ -250,6 +250,22 @@ actor ICNomads {
     public query func getMeetup(id: Nat): async ?MeetUp{
         return meetups.get(id);
     };
+    public shared({caller}) func deleteMeetup(meetupId: MeetupId): async Result.Result<(), Text> {
+    switch (meetups.get(meetupId)) {
+        case null {
+            #err("Meetup not found");
+        };
+        case (?meetup) {
+            if (meetup.creator != caller) {
+                #err("Only the creator of the meetup can delete it");
+            } else {
+                // Remove the meetup
+               ignore meetups.remove(meetupId);
+                #ok(());
+            }
+        };
+    };
+};
 
 
     // User Management
@@ -298,6 +314,22 @@ public query func getUserProfile(userId: UserId) : async ?UserView {
     switch (users.get(userId)) { //gets the detailed view of the user profile
         case null { null };
         case (?user) { ?userToUserView(user) };
+    };
+};
+public shared({caller}) func deleteUser(userId: UserId): async Result.Result<(), Text> {
+    switch (users.get(userId)) {
+        case null {
+            #err("User not found");
+        };
+        case (?user) {
+            if (userId != caller) {
+                #err("Only the user themselves can delete their account");
+            } else {
+                // Remove the user
+               ignore users.remove(userId);
+                #ok(());
+            }
+        };
     };
 };
 
