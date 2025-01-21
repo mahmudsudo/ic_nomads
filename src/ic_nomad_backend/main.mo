@@ -9,6 +9,7 @@ import Buffer "mo:base/Buffer";
 import Result "mo:base/Result";
 import Nat64 "mo:base/Nat64";
 import Int "mo:base/Int";
+import Iter "mo:base/Iter";
 
 actor ICNomads {
     // Types
@@ -242,10 +243,13 @@ actor ICNomads {
             }
         }
      };
-
-
-
 };
+    public query func getAllMeetups():async [MeetUp] {
+        Iter.toArray(meetups.vals());
+    };
+    public query func getMeetup(id: Nat): async ?MeetUp{
+        return meetups.get(id);
+    };
 
 
     // User Management
