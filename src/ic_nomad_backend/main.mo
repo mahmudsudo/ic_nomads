@@ -433,31 +433,41 @@ public shared({caller}) func deleteUser(userId: UserId): async Result.Result<(),
 
     // Submission Management
     public shared({caller}) func submitBounty(bountyId: BountyId, content: Text) : async Result.Result<(), Text> {
-        
-        
-        switch (bounties.get(bountyId)) {
-            case null { #err("Bounty not found") };
-            case (?bounty) {
-                if (bounty.status != #Open) {
-                    return #err("Bounty is not open for submissions");
-                };
+    // Check if the user exists
+    switch (users.get(caller)) {
+        case null {
+            return #err("User does not exist");
+        };
+        case (?_) {};
+    };
 
-                let submission: Submission = {
-                    userId = caller;
-                    bountyId = bountyId;
-                    content = content;
-                    submittedAt = Time.now();
-                    var status = #Pending;
-                };
-                
-                bounty.submissions.add(submission);
-                switch (await addActivity(caller, #BountySubmission, 50)) {
-                    case (#ok(_)) { #ok(()) };
-                    case (#err(e)) { #err(e) };
-                };
+    switch (bounties.get(bountyId)) {
+        case null { #err("Bounty not found") };
+        case (?bounty) {
+            if (bounty.status != #Open) {
+                return #err("Bounty is not open");
             };
+
+         
+            let newSubmission: Submission = {
+                userId = caller;
+                bountyId = bountyId;
+                content = content;
+                submittedAt = Time.now();
+                var status = #Pending;
+            };
+
+          
+            bounty.submissions.add(newSubmission);
+
+          
+            bounties.put(bountyId, bounty);
+
+            #ok(());
         };
     };
+};
+
 
     // Activity and XP Management
     public shared({caller}) func addActivity(userId: UserId, activityType: ActivityType, points: Nat) : async Result.Result<(), Text> {
