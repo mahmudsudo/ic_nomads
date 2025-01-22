@@ -311,7 +311,9 @@ actor ICNomads {
     // User Management
     public shared({caller}) func registerUser(username: Text, email: Text) : async Result.Result<(), Text> {
         
-        
+    if(isAdmin(caller)== false){
+        return #err("only admin can register user")
+     }else{
         switch (users.get(caller)) {
             case (?_) { #err("User already exists") };
             case null {
@@ -329,6 +331,7 @@ actor ICNomads {
                 #ok(());
             };
         };
+     }
     };
 
     public shared({caller}) func registerCompany(name: Text, description: Text, website: ?Text) : async Result.Result<(), Text> {
@@ -459,7 +462,7 @@ public shared({caller}) func deleteUser(userId: UserId): async Result.Result<(),
     // Activity and XP Management
     public shared({caller}) func addActivity(userId: UserId, activityType: ActivityType, points: Nat) : async Result.Result<(), Text> {
     if(isAdmin(caller)== false){
-        return #err("only admin can can delete meetup")
+        return #err("only admin can add activity")
      }else{
         switch (users.get(userId)) {
             case null { #err("User not found") };
