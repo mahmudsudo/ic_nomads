@@ -15,6 +15,8 @@ actor ICNomads {
     // Types
     type UserId = Principal;
     type CompanyId = Principal;
+    type Admins = [Principal];
+    var admins: Admins = [];
     
     public type UserView = {
         id: UserId;
@@ -153,6 +155,7 @@ actor ICNomads {
     // State Variables
     private stable var nextBountyId: Nat = 0;
     private stable var nextMeetupId: Nat= 0;
+
     private var users = HashMap.HashMap<UserId, UserData>(0, Principal.equal, Principal.hash);
     private var companies = HashMap.HashMap<CompanyId, CompanyData>(0, Principal.equal, Principal.hash);
     private var bounties = HashMap.HashMap<BountyId, BountyData>(0, Nat.equal, Hash.hash);
@@ -204,10 +207,37 @@ actor ICNomads {
             submissions = Buffer.toArray(Buffer.map<Submission, SubmissionView>(bounty.submissions, submissionToSubmissionView));
         }
     };
+    //admin management
+   
+ private func isAdmin(user: Principal): Bool {
+    Array.find<Principal>(admins, func(x) { x == user }) != null
+};
+ public shared({caller}) func addAdmin(newAdmin: Principal): async Result.Result<(), Text> {
+    switch (Array.size(admins)) {
+        case (0) {
+            // If admins array is empty, make the caller the first admin
+            admins := [caller];
+            return #ok(());
+        };
+        case (_) {
+            if (isAdmin(caller) == false) {
+                return #err("Only admins can add new admins");
+            };
+            if (isAdmin(newAdmin)) {
+                return #err("User is already an admin");
+            };
+            admins := Array.append<Principal>(admins, [newAdmin]);
+            return #ok(());
+        };
+    }
+};
 
     //Meetup management
     public shared({caller}) func addMeetUp(payload: meetupPayload): async Result.Result<(), Text>{
-         let meetupId = nextMeetupId;
+       if(isAdmin(caller) == false){
+        return #err("only admin can call function")
+       }else{
+          let meetupId = nextMeetupId;
         nextMeetupId += 1;
         let newMeetup: MeetUp = {
         id=  meetupId;
@@ -220,10 +250,14 @@ actor ICNomads {
         };
         meetups.put(meetupId, newMeetup);
          #ok(());
+       }
     };
   public shared ({caller}) func editMeetup(meetupId: MeetupId, payload: meetupPayload): async Result.Result<(), Text>  {
      let oldMeetup: ?MeetUp = meetups.get(meetupId);
-     switch(oldMeetup){
+     if(isAdmin(caller)== false){
+        return #err("only admin can call this function")
+     }else{
+          switch(oldMeetup){
         case(null){#err("meetup not found")}; //meetup doesnt exist
         case(?currentMeetup){
             if(currentMeetup.creator != caller){
@@ -243,6 +277,8 @@ actor ICNomads {
             }
         }
      };
+     }
+   
 };
     public query func getAllMeetups():async [MeetUp] {
         Iter.toArray(meetups.vals());
@@ -251,6 +287,9 @@ actor ICNomads {
         return meetups.get(id);
     };
     public shared({caller}) func deleteMeetup(meetupId: MeetupId): async Result.Result<(), Text> {
+     if(isAdmin(caller)== false){
+        return #err("only admin can can delete meetup")
+     }else{
     switch (meetups.get(meetupId)) {
         case null {
             #err("Meetup not found");
@@ -265,13 +304,16 @@ actor ICNomads {
             }
         };
     };
+     }
 };
 
 
     // User Management
     public shared({caller}) func registerUser(username: Text, email: Text) : async Result.Result<(), Text> {
         
-        
+    if(isAdmin(caller)== false){
+        return #err("only admin can register user")
+     }else{
         switch (users.get(caller)) {
             case (?_) { #err("User already exists") };
             case null {
@@ -289,6 +331,7 @@ actor ICNomads {
                 #ok(());
             };
         };
+     }
     };
 
     public shared({caller}) func registerCompany(name: Text, description: Text, website: ?Text) : async Result.Result<(), Text> {
@@ -316,22 +359,27 @@ public query func getUserProfile(userId: UserId) : async ?UserView {
         case (?user) { ?userToUserView(user) };
     };
 };
+
+//deletes the user
 public shared({caller}) func deleteUser(userId: UserId): async Result.Result<(), Text> {
     switch (users.get(userId)) {
         case null {
+            // User not found
             #err("User not found");
         };
         case (?user) {
-            if (userId != caller) {
-                #err("Only the user themselves can delete their account");
-            } else {
+            // Check if the caller is the user themselves or an admin
+            if (userId == caller or isAdmin(caller)) {
                 // Remove the user
-               ignore users.remove(userId);
+                ignore users.remove(userId);
                 #ok(());
+            } else {
+                #err("Only the user or an admin can delete this account");
             }
         };
     };
 };
+
 
 
     // Bounty Management
@@ -385,34 +433,47 @@ public shared({caller}) func deleteUser(userId: UserId): async Result.Result<(),
 
     // Submission Management
     public shared({caller}) func submitBounty(bountyId: BountyId, content: Text) : async Result.Result<(), Text> {
-        
-        
-        switch (bounties.get(bountyId)) {
-            case null { #err("Bounty not found") };
-            case (?bounty) {
-                if (bounty.status != #Open) {
-                    return #err("Bounty is not open for submissions");
-                };
-
-                let submission: Submission = {
-                    userId = caller;
-                    bountyId = bountyId;
-                    content = content;
-                    submittedAt = Time.now();
-                    var status = #Pending;
-                };
-                
-                bounty.submissions.add(submission);
-                switch (await addActivity(caller, #BountySubmission, 50)) {
-                    case (#ok(_)) { #ok(()) };
-                    case (#err(e)) { #err(e) };
-                };
-            };
+    // Check if the user exists
+    switch (users.get(caller)) {
+        case null {
+            return #err("User does not exist");
         };
+        case (?_) {};
     };
 
+    switch (bounties.get(bountyId)) {
+        case null { #err("Bounty not found") };
+        case (?bounty) {
+            if (bounty.status != #Open) {
+                return #err("Bounty is not open");
+            };
+
+         
+            let newSubmission: Submission = {
+                userId = caller;
+                bountyId = bountyId;
+                content = content;
+                submittedAt = Time.now();
+                var status = #Pending;
+            };
+
+          
+            bounty.submissions.add(newSubmission);
+
+          
+            bounties.put(bountyId, bounty);
+
+            #ok(());
+        };
+    };
+};
+
+
     // Activity and XP Management
-    public shared func addActivity(userId: UserId, activityType: ActivityType, points: Nat) : async Result.Result<(), Text> {
+    public shared({caller}) func addActivity(userId: UserId, activityType: ActivityType, points: Nat) : async Result.Result<(), Text> {
+    if(isAdmin(caller)== false){
+        return #err("only admin can add activity")
+     }else{
         switch (users.get(userId)) {
             case null { #err("User not found") };
             case (?user) {
@@ -428,6 +489,7 @@ public shared({caller}) func deleteUser(userId: UserId): async Result.Result<(),
                 #ok(());
             };
         };
+     }
     };
 
     // Leaderboard
@@ -465,4 +527,7 @@ public shared({caller}) func deleteUser(userId: UserId): async Result.Result<(),
             };
         };
     };
+    public shared ({caller}) func getPrincipal(): async Principal{
+        return caller;
+    }
 };
